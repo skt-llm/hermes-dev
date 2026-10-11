@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>파일 스캐너</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#161a22; --panel2:#1c2230; --border:#2a3140;
+    --text:#e6e9ef; --muted:#8a93a6; --accent:#4f8cff; --accent2:#3ecf8e;
+    --warn:#f2b134; --danger:#e5654f; --tag:#2b3550;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Malgun Gothic","Apple SD Gothic Neo",sans-serif;background:var(--bg);color:var(--text);font-size:14px}
+  header{position:sticky;top:0;z-index:20;background:linear-gradient(180deg,#141926,#12151d);border-bottom:1px solid var(--border);padding:14px 22px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:700;letter-spacing:.2px}
+  header .meta{color:var(--muted);font-size:12px}
+  .spacer{flex:1}
+  button{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent)}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+  button.primary:hover{filter:brightness(1.08)}
+  button.ghost{background:transparent}
+  button.small{padding:4px 9px;font-size:12px;border-radius:6px}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  .bar{display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:14px 22px 4px}
+  input[type=text],input[type=search],select{background:var(--panel);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:8px 11px;font-size:13px}
+  input:focus,select:focus{outline:none;border-color:var(--accent)}
+  .toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:12px 22px}
+  .toolbar .group-filter{min-width:260px;flex:1;max-width:380px}
+  .toast{position:fixed;right:18px;bottom:18px;background:var(--panel2);border:1px solid var(--border);border-left:3px solid var(--accent2);border-radius:8px;padding:11px 16px;box-shadow:0 8px 30px rgba(0,0,0,.4);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none;max-width:340px;z-index:50}
+  .toast.show{opacity:1;transform:translateY(0)}
+  table{width:100%;border-collapse:collapse}
+  thead th{position:sticky;top:0;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);padding:10px 14px;border-bottom:1px solid var(--border);background:var(--panel);white-space:nowrap}
+  tbody td{padding:10px 14px;border-bottom:1px solid var(--border);vertical-align:middle}
+  tbody tr.file-row{cursor:pointer;transition:background .12s}
+  tbody tr.file-row:hover{background:var(--panel)}
+  tbody tr.file-row.expanded{background:var(--panel)}
+  .path{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;color:var(--text);word-break:break-all}
+  .na{color:var(--muted);font-style:italic}
+  .pill{display:inline-block;background:var(--tag);color:#c7d2fe;border-radius:6px;padding:2px 8px;font-size:11px;margin:1px 3px 1px 0}
+  .type-badge{font-family:monospace;font-size:11px;padding:2px 7px;border-radius:6px;border:1px solid var(--border)}
+  .type-badge.csv{color:#7ee0a3}.type-badge.json{color:#ffd479}.type-badge.xml{color:#8ab4ff}.type-badge.txt{color:#c9a0ff}
+  .detail-wrap{background:#0c0f14}
+  .detail-wrap td{padding:0}
+  .detail{padding:18px 22px;border-bottom:1px solid var(--border)}
+  .detail h3{margin:0 0 14px;font-size:14px;color:var(--accent)}
+  .dgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-bottom:16px}
+  .dgrid label{display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px}
+  .dgrid .val{font-size:12px;color:var(--muted)}
+  .fields-table{width:100%}
+  .fields-table th{position:static;font-size:11px;text-transform:uppercase;color:var(--muted);padding:7px 9px;border-bottom:1px solid var(--border);text-align:left}
+  .fields-table td{padding:7px 9px;border-bottom:1px solid #1a1f29}
+  .fields-table input[type=text]{width:100%;padding:5px 8px;font-size:12px}
+  .fields-table input[type=checkbox]{width:16px;height:16px;accent-color:var(--accent2);cursor:pointer}
+  .check{display:flex;gap:16px;flex-wrap:wrap;align-items:center;margin-top:14px;padding-top:12px;border-top:1px solid var(--border)}
+  .empty{padding:60px 20px;text-align:center;color:var(--muted)}
+  .count{color:var(--muted);font-size:12px}
+  .group-link{color:var(--accent);cursor:pointer;text-decoration:underline dotted;text-underline-offset:2px}
+  .group-link:hover{color:#7aa8ff}
+  .base-flag{color:var(--accent2);font-size:11px;margin-left:5px;cursor:default}
+  .chev{display:inline-block;transition:transform .2s;color:var(--muted);margin-right:8px}
+  .expanded .chev{transform:rotate(90deg)}
+  .rec-note{font-size:11px;color:var(--muted);margin-top:6px}
+  details.sample{margin-top:10px}
+  details.sample summary{cursor:pointer;color:var(--muted);font-size:12px}
+  pre.sample-pre{background:#0a0d12;border:1px solid var(--border);border-radius:8px;padding:10px;font-size:11.5px;overflow:auto;max-height:260px;margin-top:8px}
+  .legend{font-size:11px;color:var(--muted)}
+  .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;z-index:60}
+  .modal-bg.show{display:flex}
+  .modal{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:20px;min-width:360px;max-width:520px;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+  .modal h3{margin:0 0 14px}
+  .modal .row{margin-bottom:12px}
+  .modal .row label{display:block;font-size:12px;color:var(--muted);margin-bottom:4px}
+  .modal .row input{width:100%}
+  .modal .actions{display:flex;gap:10px;justify-content:flex-end;margin-top:16px}
+  .hint{font-size:11px;color:var(--muted);margin-top:3px}
+</style>
+</head>
+<body>
+<header>
+  <h1>📁 파일 스캐너</h1>
+  <div class="meta">initialdir: <code>{{ initialdir }}</code></div>
+  <div class="spacer"></div>
+  <button class="primary" id="btnScan">🔍 스캔하기</button>
+</header>
+
+<div class="bar">
+  <span class="count" id="count">0개 파일</span>
+  <span class="legend">그룹 필터에 입력하면 실시간으로 좁혀집니다</span>
+</div>
+
+<div class="toolbar">
+  <input type="search" class="group-filter" id="groupFilter" placeholder="그룹명으로 필터 (실시간)..." autocomplete="off">
+  <button id="btnGroupDetail" class="ghost">🗂️ 그룹 상세</button>
+  <button id="btnMergeGroup" class="ghost">🔀 그룹 합치기</button>
+  <button id="btnRenameGroup" class="ghost">이름 변경</button>
+  <button id="btnRegexGroup" class="ghost">Regex로 일괄 지정</button>
+  <select id="groupSelect" title="그룹 선택"><option value="">그룹 선택…</option></select>
+</div>
+
+<div style="padding:0 10px 40px 14px">
+<table id="fileTable">
+  <thead>
+    <tr>
+      <th style="width:26px"></th>
+      <th>파일명 (경로 포함)</th>
+      <th>그룹</th>
+      <th>최초발견</th>
+      <th>마지막 변경</th>
+      <th>타입</th>
+      <th>필드수</th>
+      <th>유지 필드수</th>
+      <th>태그</th>
+      <th style="width:120px">작업</th>
+    </tr>
+  </thead>
+  <tbody id="tbody"></tbody>
+</table>
+<div class="empty" id="empty" style="display:none">
+  <div style="font-size:40px;margin-bottom:10px">🗂️</div>
+  파일이 없습니다. <b>스캔하기</b> 버튼으로 <code>{{ initialdir }}</code>를 스캔하세요.
+</div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- Group detail modal -->
+<div class="modal-bg" id="groupBg" style="align-items:flex-start;padding-top:30px">
+  <div class="modal" style="min-width:560px;max-width:900px;max-height:85vh;overflow:auto">
+    <h3 style="display:flex;align-items:center;gap:10px">
+      🗂️ 그룹 상세 — <span id="gdName"></span>
+      <span class="spacer"></span>
+      <button class="small ghost" onclick="closeModal('groupBg')">닫기</button>
+    </h3>
+    <div class="row" style="margin-bottom:12px">
+      <label>기준 파일 (그룹 필드 순서/설정 기준)</label>
+      <select id="gdBase" onchange="saveGroupBase(this.value)" style="width:100%"></select>
+      <div class="hint">합칠 때 어떤 파일의 필드 구성을 기준으로 할지 정합니다.</div>
+    </div>
+    <div class="dgrid" style="grid-template-columns:1fr 1fr 1fr;margin-bottom:12px">
+      <div><label>파일 수</label><div class="val" id="gdFileCount" style="font-size:15px"></div></div>
+      <div><label>필드(합집합)</label><div class="val" id="gdFieldCount" style="font-size:15px"></div></div>
+      <div><label>그룹</label><div class="val" id="gdGroupName" style="font-size:12px;word-break:break-all"></div></div>
+    </div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:6px">그룹 내 파일 (클릭 → 파일 상세보기)</div>
+    <div id="gdFiles" style="margin-bottom:14px"></div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:6px">
+      필드 (합집합) — <span style="color:var(--accent2)">●</span>=기준파일 필드 · 보유=그룹 내 존재 파일 수 · 유지/이름/태그는 기준 파일에 저장
+    </div>
+    <table class="fields-table">
+      <thead><tr><th style="width:36px">유지</th><th style="width:180px">필드</th><th style="width:150px">변경 이름</th><th style="width:36px">태그</th><th>보유</th></tr></thead>
+      <tbody id="gdFieldRows"></tbody>
+    </table>
+    <div class="actions" style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px">
+      <button class="small primary" id="gdSave">적용 후 닫기</button>
+    </div>
+  </div>
+</div>
+
+<!-- Merge modal -->
+<div class="modal-bg" id="mergeBg" style="align-items:flex-start;padding-top:30px">
+  <div class="modal" style="min-width:560px;max-width:860px;max-height:85vh;overflow:auto">
+    <h3 style="display:flex;align-items:center;gap:10px">
+      🔀 그룹 합치기
+      <span class="spacer"></span>
+      <button class="small ghost" onclick="closeModal('mergeBg')">닫기</button>
+    </h3>
+    <div class="dgrid" style="grid-template-columns:1fr 1fr;margin-bottom:12px">
+      <div>
+        <label>합칠 그룹 (소스)</label>
+        <select id="mgFrom" onchange="runMergePreview()" style="width:100%"></select>
+      </div>
+      <div>
+        <label>대상 그룹 (머지)</label>
+        <select id="mgTo" onchange="runMergePreview()" style="width:100%"></select>
+      </div>
+    </div>
+    <div id="mgPreview" class="empty" style="padding:20px">두 그룹을 선택하면 필드 구조 비교가 표시됩니다.</div>
+    <div id="mgBaseSection" style="display:none">
+      <label style="display:block;font-size:12px;color:var(--muted);margin:10px 0 6px">
+        기준 파일 선택 — 어떤 파일의 필드 구성/설정을 그룹 기준으로 사용할까요?
+      </label>
+      <table class="fields-table">
+        <thead><tr><th style="width:36px">선택</th><th>파일</th><th style="width:80px">출처</th><th style="width:80px">필드수</th><th style="width:120px">설정 충돌</th></tr></thead>
+        <tbody id="mgBaseRows"></tbody>
+      </table>
+      <div class="hint">● 충돌 = 공통 필드에서 대상 그룹 기준 설정과 다른 유지/이름/태그 갯수 (적용 시 기준 파일 설정이 우선)</div>
+    </div>
+    <div class="actions" style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px">
+      <button class="primary" id="mgSubmit" disabled>합치기</button>
+    </div>
+  </div>
+</div>
+
+<!-- Rename group modal -->
+<div class="modal-bg" id="renameBg">
+  <div class="modal">
+    <h3>그룹명 변경</h3>
+    <div class="row"><label>현재 그룹</label><input type="text" id="rgCurrent" readonly></div>
+    <div class="row"><label>새로운 그룹명</label><input type="text" id="rgNew" placeholder="새 그룹명"></div>
+    <div class="actions">
+      <button class="ghost" onclick="closeModal('renameBg')">취소</button>
+      <button class="primary" id="rgSubmit">변경</button>
+    </div>
+  </div>
+</div>
+
+<!-- Regex assign modal -->
+<div class="modal-bg" id="regexBg">
+  <div class="modal">
+    <h3>Regex 기반 일괄 그룹 지정</h3>
+    <div class="row">
+      <label>정규식 (파일 ID 또는 그룹명 매칭)</label>
+      <input type="text" id="rgRegex" placeholder="예: UPF_.*_payload\.csv">
+      <div class="hint">매칭되는 파일들의 그룹명을 아래 값으로 일괄 지정합니다.</div>
+    </div>
+    <div class="row"><label>지정할 그룹명</label><input type="text" id="rgAssign" placeholder="예: UPF-Payload"></div>
+    <div class="row">
+      <label class="hint" style="display:flex;align-items:center;gap:6px;text-transform:none">
+        <input type="checkbox" id="rgSameFields" style="width:auto"> 동일한 필드를 가진 파일만
+      </label>
+      <div class="hint">체크 시, 첫 매칭 파일과 필드 구성이 완전히 동일한 파일만 지정 대상이 됩니다.</div>
+    </div>
+    <div class="actions">
+      <button class="ghost" onclick="closeModal('regexBg')">취소</button>
+      <button class="primary" id="rgAssignSubmit">일괄 지정</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const PARSER_NAMES = {{ parser_names | tojson }};
+let FILTER = "";
+let expandedId = null;   // currently expanded file id
+let detailCache = {};    // file_id -> detail payload (last fetched)
+let currentFiles = [];   // last listed rows
+
+function $(id){return document.getElementById(id);}
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function fmt(v){return (v===null||v===undefined||v==='')?'<span class="na">N/A</span>':esc(v);}
+function toast(msg){const t=$('toast');t.textContent=msg;t.classList.add('show');clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove('show'),2600);}
+function closeModal(id){$(id).classList.remove('show');}
+
+async function api(path, opts){
+  const res = await fetch(path, opts);
+  const data = await res.json().catch(()=>({}));
+  if(!res.ok){throw new Error(data.detail || res.statusText);}
+  return data;
+}
+
+function tagsHtml(tags){
+  if(!tags) return '<span class="na">N/A</span>';
+  const list = String(tags).split(',').map(s=>s.trim()).filter(Boolean);
+  if(!list.length) return '<span class="na">N/A</span>';
+  return list.map(t=>`<span class="pill">${esc(t)}</span>`).join('');
+}
+
+async function loadFiles(){
+  const d = await api('/api/files?group='+encodeURIComponent(FILTER));
+  currentFiles = d.files;
+  renderFiles(d.files);
+  await loadGroups();
+}
+
+async function loadGroups(){
+  const d = await api('/api/groups');
+  const sel = $('groupSelect'); const cur = sel.value;
+  sel.innerHTML = '<option value="">그룹 선택…</option>' + d.groups.map(g=>`<option value="${esc(g)}">${esc(g)}</option>`).join('');
+  sel.value = cur;
+}
+
+function renderFiles(files){
+  const tb = $('tbody'); tb.innerHTML='';
+  $('count').textContent = files.length + '개 파일';
+  $('empty').style.display = files.length? 'none':'block';
+  files.forEach(f=>{
+    const tr = document.createElement('tr');
+    tr.className='file-row' + (expandedId===f.id?' expanded':'');
+    tr.dataset.id = f.id;
+    const typeBadge = f.file_type? `<span class="type-badge ${esc(f.file_type)}">${esc(f.file_type)}</span>` : '<span class="na">N/A</span>';
+    tr.innerHTML = `
+      <td><span class="chev">▶</span></td>
+      <td><span class="path">${esc(f.id)}</span></td>
+      <td><span class="group-link" data-group="${esc(f.group_name)}">${fmt(f.group_name)}</span></td>
+      <td>${fmt(f.first_seen)}</td>
+      <td>${fmt(f.last_modified)}</td>
+      <td>${typeBadge}</td>
+      <td>${f.field_count? f.field_count : '<span class="na">N/A</span>'}</td>
+      <td>${f.keep_count? f.keep_count : '<span class="na">N/A</span>'}</td>
+      <td>${tagsHtml(f.tags)}</td>
+      <td><button class="small" data-act="detail">상세보기</button></td>`;
+    tr.querySelector('button[data-act=detail]').onclick = (e)=>{e.stopPropagation();toggleDetail(f.id);};
+    const gl = tr.querySelector('.group-link');
+    if(gl && f.group_name) gl.onclick = (e)=>{e.stopPropagation();openGroupDetail(f.group_name);};
+    tr.onclick = ()=>toggleDetail(f.id);
+    tb.appendChild(tr);
+  });
+}
+
+async function toggleDetail(id){
+  const row = document.querySelector(`tr[data-id="${CSS.escape(id)}"]`);
+  // remove any existing detail rows
+  document.querySelectorAll('tr.detail-wrap').forEach(r=>r.remove());
+  if(expandedId===id){expandedId=null;row.classList.remove('expanded');loadFiles();return;}
+  expandedId=id;
+  row.classList.add('expanded');
+  let d = detailCache[id];
+  try{ d = await api('/api/file/detail?file_id='+encodeURIComponent(id)); }catch(e){toast('상세 로딩 실패: '+e.message);expandedId=null;row.classList.remove('expanded');return;}
+  detailCache[id]=d;
+  const dr = document.createElement('tr');
+  dr.className='detail-wrap';
+  dr.innerHTML = `<td colspan="10"><div class="detail" id="detail-${esc(id)}"></div></td>`;
+  row.after(dr);
+  renderDetail(id, d, dr.querySelector('.detail'));
+}
+
+function renderDetail(id, d, el){
+  const f = d.file;
+  const fields = d.fields||[];
+  const meta = d.meta;
+  const parserOpts = (d.parsers||[]).map(p=>`<option value="${esc(p)}" ${f.parser===p?'selected':''}>${esc(p)}</option>`).join('');
+  el.innerHTML = `
+    <h3>📄 파일 상세 — ${esc(f.id)}</h3>
+    <div class="dgrid">
+      <div><label>파일 유형 (수정 가능)</label>
+        <select id="d-type">
+          ${['csv','json','xml','txt'].map(t=>`<option value="${t}" ${f.file_type===t?'selected':''}>${t}</option>`).join('')}
+        </select>
+      </div>
+      <div><label>그룹명</label>
+        <input type="text" id="d-group" value="${esc(f.group_name||'')}">
+      </div>
+      <div><label>파서</label>
+        <select id="d-parser"><option value="">(없음)</option>${parserOpts}</select>
+      </div>
+      <div><label>레코드 수</label><div class="val">${meta && meta.total_records!=null? meta.total_records : 'N/A'}</div>
+        <div class="rec-note">상세 체크: ${meta && meta.detail_checked_at? esc(meta.detail_checked_at):'N/A'}</div></div>
+    </div>
+    <div style="margin-bottom:6px;font-size:12px;color:var(--muted)">필드 (유지 여부, 이름 변경, 태그 지정)</div>
+    <table class="fields-table">
+      <thead><tr><th style="width:44px">유지</th><th style="width:260px">원 필드명</th><th>변경 후 이름</th><th style="width:44px">태그</th></tr></thead>
+      <tbody>
+        ${fields.map(fl=>`
+          <tr data-fn="${esc(fl.field_name)}">
+            <td><input type="checkbox" class="f-keep" ${fl.keep?'checked':''}></td>
+            <td>${esc(fl.field_name)}</td>
+            <td><input type="text" class="f-rename" value="${esc(fl.rename_to||'')}" placeholder="${esc(fl.field_name)}"></td>
+            <td><input type="checkbox" class="f-tag" ${fl.is_tag?'checked':''}></td>
+          </tr>`).join('') || '<tr><td colspan="4" class="na">필드가 없습니다</td></tr>'}
+      </tbody>
+    </table>
+    <div class="check">
+      <button class="small primary" data-act="refresh">🔄 갱신하기</button>
+      <button class="small" data-act="saveclose">저장 후 닫기</button>
+      <span class="legend">갱신하기: 실제 파일 재읽기 → 유형/필드/레코드 업데이트 (설정 보존)</span>
+    </div>`;
+
+  el.querySelector('[data-act=refresh]').onclick = async ()=>{
+    try{
+      const nd = await api('/api/file/refresh?file_id='+encodeURIComponent(id), {method:'POST'});
+      detailCache[id]=nd;
+      renderDetail(id, nd, el);
+      toast('파일 상세를 갱신했습니다');
+      loadFiles();
+    }catch(e){toast('갱신 실패: '+e.message);}
+  };
+  el.querySelector('[data-act=saveclose]').onclick = async ()=>{
+    const payload = {
+      file_id:id,
+      file_type: el.querySelector('#d-type').value,
+      group_name: el.querySelector('#d-group').value,
+      parser: el.querySelector('#d-parser').value || null,
+      fields: [...el.querySelectorAll('.fields-table tr[data-fn]')].map(tr=>({
+        field_name: tr.dataset.fn,
+        keep: tr.querySelector('.f-keep').checked,
+        rename_to: tr.querySelector('.f-rename').value.trim() || null,
+        is_tag: tr.querySelector('.f-tag').checked
+      }))
+    };
+    try{
+      await api('/api/file/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+      toast('저장되었습니다');
+      expandedId=null;
+      loadFiles();
+    }catch(e){toast('저장 실패: '+e.message);}
+  };
+}
+
+$('btnScan').onclick = async ()=>{
+  $('btnScan').disabled=true; $('btnScan').textContent='스캔 중…';
+  try{
+    const d = await api('/api/scan',{method:'POST'});
+    toast(`스캔 완료 — 새로 ${d.created}, 갱신 ${d.updated}`);
+    await loadFiles();
+  }catch(e){toast('스캔 실패: '+e.message);}
+  $('btnScan').disabled=false; $('btnScan').textContent='🔍 스캔하기';
+};
+
+let _filterT=null;
+$('groupFilter').oninput = (e)=>{FILTER=e.target.value;clearTimeout(_filterT);_filterT=setTimeout(loadFiles,180);};
+$('groupSelect').onchange = (e)=>{FILTER=e.target.value;$('groupFilter').value=e.target.value;loadFiles();};
+
+$('btnRenameGroup').onclick = ()=>{
+  const g = $('groupSelect').value;
+  if(!g){toast('그룹을 먼저 선택하세요 (우측 드롭다운)');return;}
+  $('rgCurrent').value=g; $('rgNew').value=g;
+  $('renameBg').classList.add('show');
+};
+$('rgSubmit').onclick = async ()=>{
+  const cur=$('rgCurrent').value, nv=$('rgNew').value.trim();
+  if(!nv){toast('새 그룹명을 입력하세요');return;}
+  try{
+    const d=await api('/api/group/rename',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({group_name:cur,new_group_name:nv})});
+    toast(`${d.renamed}개 파일의 그룹명을 변경했습니다`);
+    closeModal('renameBg'); loadFiles();
+  }catch(e){toast('변경 실패: '+e.message);}
+};
+
+$('btnRegexGroup').onclick = ()=>{
+  $('rgRegex').value='';$('rgAssign').value='';$('rgSameFields').checked=false;
+  $('regexBg').classList.add('show');
+};
+$('rgAssignSubmit').onclick = async ()=>{
+  const rx=$('rgRegex').value.trim(), gn=$('rgAssign').value.trim();
+  if(!rx){toast('정규식을 입력하세요');return;}
+  try{
+    const d=await api('/api/group/assign',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({regex:rx,group_name:gn,require_same_fields:$('rgSameFields').checked})});
+    toast(`${d.assigned}개 파일을 그룹 "${gn}"으로 지정했습니다`);
+    closeModal('regexBg'); loadFiles();
+  }catch(e){toast('지정 실패: '+e.message);}
+};
+
+document.querySelectorAll('.modal-bg').forEach(bg=>bg.onclick=(e)=>{if(e.target===bg)bg.classList.remove('show');});
+
+// ======================================================================
+// Group detail (group-centric)
+// ======================================================================
+let groupDetailData = null;
+
+async function openGroupDetail(name){
+  if(!name){toast('그룹을 선택하세요');return;}
+  $('gdName').textContent = name;
+  $('gdGroupName').textContent = name;
+  $('groupBg').classList.add('show');
+  try{
+    const d = await api('/api/group/detail?group='+encodeURIComponent(name));
+    groupDetailData = d;
+    renderGroupDetail(d);
+  }catch(e){
+    $('gdFiles').innerHTML = '<div class="na">로드 실패: '+esc(e.message)+'</div>';
+  }
+}
+
+function renderGroupDetail(d){
+  // base file selector
+  const sel = $('gdBase');
+  sel.innerHTML = '<option value="">(없음 — 첫 파일 기준)</option>' +
+    d.files.map(f=>`<option value="${esc(f.id)}" ${f.id===d.base_file?'selected':''}>${esc(f.id)} (${f.field_count} 필드)</option>`).join('');
+  $('gdFileCount').textContent = d.file_count;
+  $('gdFieldCount').textContent = d.field_order.length;
+  // files
+  $('gdFiles').innerHTML = d.files.map(f=>{
+    const base = f.id===d.base_file ? '<span class="base-flag">● 기준</span>' : '';
+    return `<div style="padding:6px 0;border-bottom:1px solid #1a1f29;display:flex;gap:10px;align-items:center">
+      <span class="path" style="cursor:pointer;color:var(--accent)" onclick="openFileFromGroup('${esc(f.id)}')">${esc(f.id)}</span>${base}
+      <span class="type-badge ${esc(f.file_type||'txt')}">${esc(f.file_type||'txt')}</span>
+      <span class="na">${f.field_count} 필드</span>
+    </div>`;
+  }).join('');
+  // field table
+  $('gdFieldRows').innerHTML = d.field_table.map(fl=>`
+    <tr data-f="${esc(fl.field)}">
+      <td><input type="checkbox" class="g-keep" ${fl.is_base && fl.keep?'checked':''} ${fl.is_base?'':'disabled'}></td>
+      <td>${fl.is_base?'<span style="color:var(--accent2)">● </span>':''}${esc(fl.field)}${!fl.is_base?' <span class="na" style="font-size:11px">(비기준)</span>':''}</td>
+      <td><input type="text" class="g-rename" value="${esc(fl.rename_to||'')}" ${fl.is_base?'':'disabled'} placeholder="${esc(fl.field)}"></td>
+      <td><input type="checkbox" class="g-tag" ${fl.is_base && fl.is_tag?'checked':''} ${fl.is_base?'':'disabled'}></td>
+      <td>${fl.present}/${d.file_count}${fl.missing?` <span class="na" style="font-size:11px">(누락 ${fl.missing})</span>`:''}</td>
+    </tr>`).join('') || '<tr><td colspan="5" class="na">필드가 없습니다</td></tr>';
+}
+
+function openFileFromGroup(fid){
+  closeModal('groupBg');
+  // ensure it's listed (clear filter first if needed)
+  if(FILTER){ $('groupFilter').value=''; FILTER=''; }
+  loadFiles().then(()=>{
+    const row = document.querySelector(`tr[data-id="${CSS.escape(fid)}"]`);
+    if(row){ row.scrollIntoView({behavior:'smooth',block:'center'}); toggleDetail(fid); }
+  });
+}
+
+async function saveGroupBase(file){
+  if(!groupDetailData) return;
+  try{
+    await api('/api/group/base',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({group_name:groupDetailData.group_name, base_file: file||null})});
+    // re-render to reflect new base order
+    const d = await api('/api/group/detail?group='+encodeURIComponent(groupDetailData.group_name));
+    groupDetailData = d; renderGroupDetail(d);
+    toast('기준 파일을 적용했습니다');
+  }catch(e){toast('기준 파일 변경 실패: '+e.message);}
+}
+
+$('gdSave').onclick = async ()=>{
+  if(!groupDetailData) return;
+  const g = groupDetailData;
+  const base = $('gdBase').value || null;
+  const payload = {file_id: base, file_type:null, group_name:g.group_name, parser:null, fields:[]};
+  // collect editable (base-file) field settings
+  const editable = g.field_table.filter(f=>f.is_base);
+  payload.fields = [...document.querySelectorAll('#gdFieldRows tr[data-f]')].filter(tr=>{
+    const fl = editable.find(x=>x.field===tr.dataset.f); return fl;
+  }).map(tr=>({
+    field_name: tr.dataset.f,
+    keep: tr.querySelector('.g-keep').checked,
+    rename_to: tr.querySelector('.g-rename').value.trim() || null,
+    is_tag: tr.querySelector('.g-tag').checked
+  }));
+  try{
+    if(base){ await api('/api/file/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}); }
+    await api('/api/group/base',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({group_name:g.group_name, base_file: base})});
+    toast('그룹 상세를 저장했습니다');
+    closeModal('groupBg');
+    loadFiles();
+  }catch(e){toast('저장 실패: '+e.message);}
+};
+
+$('btnGroupDetail').onclick = ()=>{
+  const g = $('groupSelect').value;
+  if(!g){toast('그룹을 먼저 선택하세요 (우측 드롭다운)');return;}
+  openGroupDetail(g);
+};
+
+// ======================================================================
+// Group merge (base-file selection)
+// ======================================================================
+let mergePreview = null;
+let mergeBaseChoice = null;
+
+function groupOpts(){
+  return currentFiles.reduce((s,f)=>{const g=f.group_name; if(g&&!s.includes(g))s.push(g);return s;},[]);
+}
+
+$('btnMergeGroup').onclick = async ()=>{
+  const g = await api('/api/groups');
+  const opts = g.groups.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join('');
+  const from=$('mgFrom'), to=$('mgTo');
+  from.innerHTML = opts; to.innerHTML = opts;
+  if(g.groups.length>=2) to.selectedIndex = 1;
+  else to.selectedIndex = 0;
+  $('mgPreview').innerHTML = '<div class="empty" style="padding:20px">두 그룹을 선택하면 필드 구조 비교가 표시됩니다.</div>';
+  $('mgBaseSection').style.display='none';
+  $('mgSubmit').disabled = true;
+  mergePreview = null; mergeBaseChoice = null;
+  $('mergeBg').classList.add('show');
+};
+
+async function runMergePreview(){
+  const frm=$('mgFrom').value, to=$('mgTo').value;
+  if(!frm||!to||frm===to){
+    $('mgPreview').innerHTML = '<div class="empty" style="padding:20px">'+(frm===to?'같은 그룹을 선택할 수 없습니다':'두 그룹을 선택하세요')+'</div>';
+    $('mgBaseSection').style.display='none'; $('mgSubmit').disabled=true; mergePreview=null;
+    return;
+  }
+  try{
+    const d = await api('/api/groups/merge-preview?frm='+encodeURIComponent(frm)+'&to='+encodeURIComponent(to));
+    mergePreview = d; mergeBaseChoice = null; $('mgSubmit').disabled=true;
+    renderMergePreview(d);
+  }catch(e){
+    $('mgPreview').innerHTML = '<div class="na">로드 실패: '+esc(e.message)+'</div>';
+  }
+}
+
+function renderMergePreview(d){
+  const chip=(a)=>a.length? a.map(x=>`<span class="pill">${esc(x)}</span>`).join('') : '<span class="na">없음</span>';
+  const conflictBanner = (d.conflict
+    ? `<div style="background:#3a2a14;border:1px solid #8a5a1e;border-radius:8px;padding:10px 12px;margin-bottom:10px;color:#ffd479">
+        ⚠️ 필드 구조가 다릅니다. 공통 ${d.common.length}개 · 소스만 ${d.only_from.length}개 · 대상만 ${d.only_to.length}개.
+        기준 파일을 선택해 어떤 구성/설정을 사용할지 정하세요.</div>`
+    : `<div style="background:#14301f;border:1px solid #2f6b45;border-radius:8px;padding:10px 12px;margin-bottom:10px;color:#7ee0a3">
+        ✓ 공통 필드 ${d.common.length}개로 구조가 일치합니다.</div>`);
+  $('mgPreview').innerHTML = `
+    ${conflictBanner}
+    <div class="dgrid" style="grid-template-columns:1fr 1fr;margin-bottom:8px">
+      <div><label>소스 "${esc(d.from.group)}" — 기준 ${esc(d.from.ref_file||'N/A')}</label><div>${chip(d.from.fields)}</div></div>
+      <div><label>대상 "${esc(d.to.group)}" — 기준 ${esc(d.to.ref_file||'N/A')}</label><div>${chip(d.to.fields)}</div></div>
+    </div>`;
+  if(!d.candidates.length){
+    $('mgBaseSection').style.display='none';
+    return;
+  }
+  $('mgBaseSection').style.display='block';
+  const rec = d.candidates[0];
+  mergeBaseChoice = rec.file;
+  $('mgBaseRows').innerHTML = d.candidates.map(c=>`
+    <tr>
+      <td><input type="radio" name="mgbase" value="${esc(c.file)}" ${c.file===rec.file?'checked':''} onclick="mergeBaseChoice=this.value;$('mgSubmit').disabled=false"></td>
+      <td><span class="path">${esc(c.file)}</span>${c.file===rec.file?' <span class="base-flag">● 추천</span>':''}</td>
+      <td>${esc(c.group)}</td>
+      <td>${c.field_count}</td>
+      <td>${c.conflict_count? `<span style="color:var(--warn)">${c.conflict_count}개</span>` : '<span style="color:var(--accent2)">없음</span>'}</td>
+    </tr>`).join('');
+  $('mgSubmit').disabled=false;
+}
+
+$('mgSubmit').onclick = async ()=>{
+  const frm=$('mgFrom').value, to=$('mgTo').value;
+  if(!mergeBaseChoice){toast('기준 파일을 선택하세요');return;}
+  try{
+    const d = await api('/api/groups/merge',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({from_group:frm,to_group:to,base_file:mergeBaseChoice})});
+    toast(`${d.merged}개 파일을 "${d.to_group}"으로 합쳤습니다 (기준: ${mergeBaseChoice})`);
+    closeModal('mergeBg');
+    loadFiles();
+  }catch(e){toast('합치기 실패: '+e.message);}
+};
+
+loadFiles();
+</script>
+</body>
+</html>

@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+*.pyc
+scan.db
+scan.db-shm
+scan.db-wal
+nohup.out

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<config>
+  <item name="db_host" value="localhost" port="5432"/>
+  <item name="cache" value="redis" port="6379"/>
+  <item name="log_level" value="INFO" port="0"/>
+</config>

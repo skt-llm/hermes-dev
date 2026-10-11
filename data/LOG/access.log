@@ -1,0 +1,4 @@
+2026-10-04 11:00:01 INFO  request ok path=/health ms=3
+2026-10-04 11:00:02 INFO  request ok path=/api/files ms=11
+2026-10-04 11:00:05 WARN  slow request path=/api/scan ms=900
+2026-10-04 11:00:09 ERROR request failed path=/api/bad ms=2

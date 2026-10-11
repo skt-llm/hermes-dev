@@ -1,0 +1,14 @@
+# parser-config.yaml — 앱 기동 시 읽히는 설정
+files:
+  initialdir: data          # 스캔할 루트 (이 파일 기준 상대경로)
+  db_path: scan.db          # sqlite 저장 위치
+
+parsers:
+  - name: json_to_records
+    description: "JSON 레코드(배열/단일 객체)를 행 단위로 변환"
+  - name: xml_items
+    description: "XML 반복 항목(items)을 행 단위로 변환"
+  - name: csv_normalize
+    description: "CSV 컬럼명을 정준화(snake_case)하고 빈 값 처리"
+  - name: txt_line_split
+    description: "텍스트를 줄 기준으로 분리"

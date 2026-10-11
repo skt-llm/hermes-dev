@@ -1,0 +1,4 @@
+sensor_id,timestamp,temperature,humidity,status
+S-2001,2026-10-02T12:00:00,21.2,70,OK
+S-2002,2026-10-02T12:00:05,22.0,68,OK
+S-2003,2026-10-02T12:00:10,23.3,66,ALERT
