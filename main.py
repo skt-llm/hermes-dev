@@ -132,6 +132,89 @@ async def scan():
     return JSONResponse({"created": created, "updated": updated, "skipped": skipped})
 
 
+@app.post("/api/scan-all")
+async def scan_all():
+    """Scan the whole tree AND re-read each file's details, recording changes.
+
+    For every file: upsert first_seen/last_modified, then re-parse and persist
+    type/fields/meta (preserving user field settings). Reports, per file, what
+    changed (type / added-removed fields / record count) vs the previous DB state.
+    """
+    root = CONFIG.initialdir
+    if not os.path.isdir(root):
+        raise HTTPException(400, f"initialdir not found: {root}")
+    import time
+
+    created = updated = parse_failed = 0
+    details_recorded = 0
+    changes: List[dict] = []
+
+    for dirpath, _dirs, files in os.walk(root):
+        for fn in sorted(files):
+            full = os.path.join(dirpath, fn)
+            rel = os.path.relpath(full, root).replace(os.sep, "/")
+            try:
+                first_seen = time.strftime(
+                    "%Y-%m-%d %H:%M:%S", time.gmtime(os.path.getctime(full))
+                )
+                last_mod = scanner.mtime_str(full)
+                res = await DB.upsert_file(rel, first_seen, last_mod)
+                if res == "created":
+                    created += 1
+                else:
+                    updated += 1
+            except Exception:
+                parse_failed += 1
+                continue
+
+            try:
+                before = await DB.get_file(rel)
+                before_type = before["file_type"] if before else None
+                before_fields = {f["field_name"] for f in await DB.get_fields(rel)}
+                before_meta = await DB.get_meta(rel)
+
+                parsed = scanner.parse_file(full)
+                await _persist_parsed(rel, parsed, keep_settings=True)
+
+                after_type = parsed.get("type", "txt")
+                after_fields = set(parsed.get("fields", []))
+                after_records = parsed.get("total_records")
+                ch: List[str] = []
+                if before_meta is None:
+                    details_recorded += 1
+                    ch.append(
+                        f"상세 최초 기록 ({after_type}, 필드 {len(after_fields)}, 레코드 {after_records})"
+                    )
+                else:
+                    if before_type != after_type:
+                        ch.append(f"type {before_type or 'N/A'}→{after_type}")
+                    added = after_fields - before_fields
+                    removed = before_fields - after_fields
+                    if added:
+                        ch.append("필드 추가: " + ", ".join(sorted(added)))
+                    if removed:
+                        ch.append("필드 제거: " + ", ".join(sorted(removed)))
+                    if before_meta.get("total_records") != after_records:
+                        ch.append(
+                            f"레코드 {before_meta.get('total_records')}→{after_records}"
+                        )
+                if ch:
+                    changes.append({"id": rel, "changes": ch})
+            except Exception:
+                parse_failed += 1
+
+    return JSONResponse(
+        {
+            "created": created,
+            "updated": updated,
+            "parse_failed": parse_failed,
+            "details_recorded": details_recorded,
+            "details_changed": sum(1 for c in changes if "최초 기록" not in " ".join(c["changes"])),
+            "changes": changes,
+        }
+    )
+
+
 # ---------------------------------------------------------------------------
 # List files
 # ---------------------------------------------------------------------------

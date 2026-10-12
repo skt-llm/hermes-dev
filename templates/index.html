@@ -82,6 +82,7 @@
   <h1>📁 파일 스캐너</h1>
   <div class="meta">initialdir: <code>{{ initialdir }}</code></div>
   <div class="spacer"></div>
+  <button class="ghost" id="btnScanAll" title="전체 스캔 + 파일 상세 재조회, 변경사항 기록">🧾 전체 스캔·변경기록</button>
   <button class="primary" id="btnScan">🔍 스캔하기</button>
 </header>
 
@@ -190,6 +191,24 @@
     <div class="actions" style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px">
       <button class="primary" id="mgSubmit" disabled>합치기</button>
     </div>
+  </div>
+</div>
+
+<!-- Scan-all results modal -->
+<div class="modal-bg" id="scanAllBg" style="align-items:flex-start;padding-top:30px">
+  <div class="modal" style="min-width:520px;max-width:760px;max-height:85vh;overflow:auto">
+    <h3 style="display:flex;align-items:center;gap:10px">
+      🧾 전체 스캔·변경기록 결과
+      <span class="spacer"></span>
+      <button class="small ghost" onclick="closeModal('scanAllBg')">닫기</button>
+    </h3>
+    <div class="dgrid" style="grid-template-columns:1fr 1fr 1fr 1fr;margin-bottom:12px">
+      <div><label>새 파일</label><div class="val" id="saCreated" style="font-size:15px">-</div></div>
+      <div><label>갱신 파일</label><div class="val" id="saUpdated" style="font-size:15px">-</div></div>
+      <div><label>상세 최초 기록</label><div class="val" id="saRecorded" style="font-size:15px">-</div></div>
+      <div><label>변경 감지</label><div class="val" id="saChanged" style="font-size:15px">-</div></div>
+    </div>
+    <div id="saChanges" style="max-height:45vh;overflow:auto"></div>
   </div>
 </div>
 
@@ -395,6 +414,31 @@ $('btnScan').onclick = async ()=>{
     await loadFiles();
   }catch(e){toast('스캔 실패: '+e.message);}
   $('btnScan').disabled=false; $('btnScan').textContent='🔍 스캔하기';
+};
+
+$('btnScanAll').onclick = async ()=>{
+  $('btnScanAll').disabled=true; $('btnScanAll').textContent='처리 중…';
+  try{
+    const d = await api('/api/scan-all',{method:'POST'});
+    $('saCreated').textContent = d.created;
+    $('saUpdated').textContent = d.updated;
+    $('saRecorded').textContent = d.details_recorded;
+    $('saChanged').textContent = d.changes.length;
+    const ch = d.changes || [];
+    $('saChanges').innerHTML = ch.length ? `
+      <div style="font-size:12px;color:var(--muted);margin-bottom:6px">파일별 변경사항 (${ch.length})</div>
+      <table class="fields-table">
+        <thead><tr><th style="width:300px">파일</th><th>변경사항</th></tr></thead>
+        <tbody>${ch.map(c=>`
+          <tr>
+            <td><span class="path" style="color:var(--accent);cursor:pointer" onclick="closeModal('scanAllBg');openFileFromGroup('${esc(c.id)}')">${esc(c.id)}</span></td>
+            <td>${c.changes.map(x=>`<span class="pill">${esc(x)}</span>`).join('')}</td>
+          </tr>`).join('')}</tbody>
+      </table>` : '<div class="empty" style="padding:24px">변경사항 없음 — 모든 파일이 이미 최신입니다.</div>';
+    $('scanAllBg').classList.add('show');
+    await loadFiles();
+  }catch(e){toast('전체 스캔 실패: '+e.message);}
+  $('btnScanAll').disabled=false; $('btnScanAll').textContent='🧾 전체 스캔·변경기록';
 };
 
 let _filterT=null;
