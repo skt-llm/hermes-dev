@@ -70,6 +70,14 @@ class DB:
             await self._conn.close()
             self._conn = None
 
+    async def reload(self, path: str) -> None:
+        """config 변경 시 다른 db 경로로 재접속 (lib에서 연결 관리 유지)."""
+        if path == self.path and self._conn is not None:
+            return
+        await self.close()
+        self.path = path
+        await self.connect()
+
     # ---------- helpers ----------
     @staticmethod
     def now() -> str:
@@ -261,7 +269,7 @@ class DB:
         )
         return [r[0] for r in await cur.fetchall()]
 
-    async def files_in_group(self, group_name: str) -> List[Dict[str, Any]]:
+    async def files_in_group(self, group_name: str) -> List[str]:
         cur = await self.conn.execute(
             "SELECT id FROM files WHERE group_name = ? ORDER BY id", (group_name,)
         )
@@ -300,3 +308,25 @@ class DB:
     async def all_file_ids(self) -> List[str]:
         cur = await self.conn.execute("SELECT id FROM files")
         return [r[0] for r in await cur.fetchall()]
+
+
+# ---------------------------------------------------------------------------
+# 모듈 레벨 접근자 (apps 라우터가 공통으로 사용)
+# ---------------------------------------------------------------------------
+_db: Optional[DB] = None
+
+
+async def init_db(path: str) -> DB:
+    global _db
+    if _db is None:
+        _db = DB(path)
+        await _db.connect()
+    else:
+        await _db.reload(path)
+    return _db
+
+
+def get_db() -> DB:
+    if _db is None:
+        raise RuntimeError("db not initialized")
+    return _db

@@ -1,13 +1,32 @@
-"""Configuration loading from parser-config.yaml."""
+"""설정 로딩/병합 도메인 로직.
+
+Playground Core Manager 구조 대응:
+    lib/config_loader.py
+    - load_config(): 베이스 설정(parser-config.yaml) 읽기
+    - local override yaml 존재 시 dict_deep_merge 로 병합
+    - reload_config(): 런타임 재로딩
+"""
 from __future__ import annotations
 
+import copy
 import os
 from dataclasses import dataclass, field
 from typing import Any, Dict, List
 
 import yaml
 
-APP_DIR = os.path.dirname(os.path.abspath(__file__))
+APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def dict_deep_merge(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
+    """재귀 딕 병합 (override 우선). list는 교체."""
+    out = copy.deepcopy(base)
+    for k, v in (override or {}).items():
+        if isinstance(v, dict) and isinstance(out.get(k), dict):
+            out[k] = dict_deep_merge(out[k], v)
+        else:
+            out[k] = copy.deepcopy(v)
+    return out
 
 
 @dataclass
@@ -29,7 +48,7 @@ class AppConfig:
         return [p.name for p in self.parsers]
 
 
-def _find_config_path() -> str:
+def find_config_path() -> str:
     candidates = []
     env = os.environ.get("PARSER_CONFIG")
     if env:
@@ -44,12 +63,16 @@ def _find_config_path() -> str:
     )
 
 
-def load_config() -> AppConfig:
-    path = _find_config_path()
-    with open(path, "r", encoding="utf-8") as f:
-        raw = yaml.safe_load(f) or {}
+def _find_override_path() -> str | None:
+    env = os.environ.get("PARSER_CONFIG_OVERRIDE")
+    if env and os.path.isfile(env):
+        return env
+    local = os.path.join(APP_DIR, "parser-config.local.yaml")
+    return local if os.path.isfile(local) else None
 
-    base_dir = os.path.dirname(os.path.abspath(path))
+
+def build_config(raw: Dict[str, Any], config_path: str) -> AppConfig:
+    base_dir = os.path.dirname(os.path.abspath(config_path))
     files_cfg = raw.get("files") or {}
     db_cfg = raw.get("db") or {}
 
@@ -79,5 +102,20 @@ def load_config() -> AppConfig:
         db_path=db_path,
         parsers=parsers,
         raw=raw,
-        config_path=path,
+        config_path=config_path,
     )
+
+
+def load_config() -> AppConfig:
+    """베이스 설정 + 로컬 override 를 deep-merge 한 AppConfig."""
+    config_path = find_config_path()
+    with open(config_path, "r", encoding="utf-8") as f:
+        raw = yaml.safe_load(f) or {}
+
+    override_path = _find_override_path()
+    if override_path:
+        with open(override_path, "r", encoding="utf-8") as f:
+            override = yaml.safe_load(f) or {}
+        raw = dict_deep_merge(raw, override)
+
+    return build_config(raw, config_path)
