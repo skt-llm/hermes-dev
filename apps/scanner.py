@@ -49,3 +49,13 @@ async def scanner_health():
         return await run_in_threadpool(records_db.health)
     except Exception as exc:
         raise HTTPException(status_code=503, detail=f"db unavailable: {exc}")
+
+
+@router.get("/scanner/list")
+async def scanner_list(file: str = ""):
+    """저장된 파일 목록. file 문구를 주면 그 문구를 file_path 에 포함한 파일만,
+    없으면 전체를 반환 (대소문자 무시)."""
+    try:
+        return await run_in_threadpool(records_db.list_files, file.strip())
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"조회 실패: {exc}")

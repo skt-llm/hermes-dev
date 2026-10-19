@@ -176,3 +176,36 @@ def health() -> Dict[str, Any]:
     finally:
         conn.close()
     return {"ok": True, "files": n}
+
+
+def list_files(pattern: str = "") -> Dict[str, Any]:
+    """저장된 파일 목록. pattern 이 있으면 file_path 에 포함된 것만 (대소문자 무시)."""
+    ensure_schema()
+    conn = _connect()
+    try:
+        with conn.cursor() as cur:
+            q = (
+                "SELECT f.file_path, f.file_type, f.last_update, f.last_refresh, "
+                "(SELECT count(*) FROM raw_records r WHERE r.file_id = f.id) AS record_count "
+                "FROM raw_files f"
+            )
+            params: List[Any] = []
+            if pattern:
+                q += " WHERE f.file_path ILIKE %s"
+                params.append(f"%{pattern}%")
+            q += " ORDER BY f.file_path"
+            cur.execute(q, params)
+            rows = cur.fetchall()
+    finally:
+        conn.close()
+    files = [
+        {
+            "file_path": r[0],
+            "file_type": r[1],
+            "last_update": r[2].isoformat() if r[2] is not None else None,
+            "last_refresh": r[3].isoformat() if r[3] is not None else None,
+            "record_count": r[4],
+        }
+        for r in rows
+    ]
+    return {"count": len(files), "files": files}
