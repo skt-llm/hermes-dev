@@ -19,7 +19,8 @@
 | 외부 시스템 | 용도 | 관련 모듈 |
 | --- | --- | --- |
 | 파일 시스템 (initialdir) | 스캔 대상 파일 트리 | `lib/file_store.py`, `lib/scanner.py` |
-| SQLite | files/file_fields/file_meta/groups 저장 | `lib/db.py` |
+| SQLite | files/file_fields/file_meta/groups 저장 (UI 관리) | `lib/db.py` |
+| Postgres | 원시 레코드 저장 (scanner/refresh 수신) | `lib/records_db.py` |
 | parser-config.yaml | 베이스 설정 (GitLab 베이스 config 대응) | `lib/config_loader.py` |
 
 ## 3. 애플리케이션 부팅 흐름 (main.py)
@@ -83,7 +84,27 @@ API 엔드포인트는 `/api` 접두 아래에 있다.
 | | `/api/group/base` | 그룹 기준 파일 지정 | `file_store.set_group_base(db, group_name, base_file)` |
 | | `/api/groups/merge-preview` | 합치기 미리보기 (필드 비교) | `file_store.merge_preview(db, from_group, to_group)` |
 | | `/api/groups/merge` | 그룹 합치기 (기준 파일 지정) | `file_store.merge_groups(db, from_group, to_group, base_file)` |
+| `apps/scanner.py` | `/scanner/refresh` | 클라이언트 스캔 결과 수신 → Postgres 저장 | `records_db.ingest(items)` |
+| | `/scanner/health` | Postgres 연결/저장 파일 수 | `records_db.health()` |
 | `main.py` (직접) | `/api/health` | 헬스 체크 | `db.get_db().path` |
+
+`/scanner/refresh` 페이로드 (클라이언트 `raw_file_scan.py` 전송 형식, JSON 배열):
+
+```json
+[{
+  "file_path":   "/dbdata/stat/sub/a.csv",
+  "file_type":   "csv",
+  "last_update": "2026-10-19T12:34:56+00:00",
+  "first_record": { ... }        // 또는 -F 모드: "records": [ ... ]
+}]
+```
+
+저장 규칙: `raw_files` 는 `file_path` UNIQUE 기준 업서트, `raw_records` 는 파일 단위
+전체 교체(삭제→재삽입, JSONB). 파일 1개 실패 시 그 파일만 스킵하고 나머지는 커밋.
+
+Postgres 연결은 환경변수로 설정한다 (`.env` 로딩 대상):
+`DATABASE_URL` 또는 `POSTGRES_USER/POSTGRES_PASSWORD/POSTGRES_DB/POSTGRES_HOST/POSTGRES_PORT`
+(기본 `postgres`/`scanner`/`localhost:5432`, 로컬이면 소켓→tcp 순서로 시도).
 
 ## 5. UI 레이어 (apps/ui.py)
 
@@ -136,26 +157,39 @@ config = get_config()      # lib/runtime_config.py (없으면 load_config()로 �
 
 ```
 main.py               ─► config_loader, runtime_config, db, common,
-                         apps/{ui, configuration, scan, files, groups}
+                         apps/{ui, configuration, scan, files, groups, scanner}
 apps/ui.py            ─► runtime_config
 apps/configuration.py ─► runtime_config, common
 apps/scan.py          ─► file_store, db
 apps/files.py         ─► file_store, runtime_config, common, db
 apps/groups.py        ─► file_store, common, db
+apps/scanner.py       ─► records_db
 
 lib/file_store.py     ─► scanner, db, runtime_config
 lib/runtime_config.py ─► config_loader
 lib/config_loader.py  ─► (yaml)
 lib/db.py             ─► (aiosqlite)
 lib/scanner.py        ─► (csv/json/xml)
+lib/records_db.py     ─► (psycopg2)
 lib/common.py         ─► (fastapi)
 ```
 
 ## 9. DB 스키마
+
+### SQLite (UI 관리용, `lib/db.py`)
 
 ```sql
 files(id PK, first_seen, last_modified, file_type, group_name, parser, updated_at)
 file_fields(id PK, file_id, field_name, keep, rename_to, is_tag, UNIQUE(file_id, field_name))
 file_meta(file_id PK, total_records, detail_checked_at)
 groups(name PK, base_file, updated_at)   -- 그룹 기준 파일 (추가 테이블)
+```
+
+### Postgres (원시 레코드용, `lib/records_db.py`)
+
+```sql
+raw_files(id BIGSERIAL PK, file_path TEXT UNIQUE, file_type,
+          last_update TIMESTAMPTZ, first_seen, last_refresh)
+raw_records(id BIGSERIAL PK, file_id → raw_files ON DELETE CASCADE,
+            record_index INT, data JSONB, UNIQUE(file_id, record_index))
 ```

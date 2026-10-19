@@ -4,3 +4,4 @@ jinja2
 aiosqlite
 pyyaml
 python-dotenv
+psycopg2-binary

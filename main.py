@@ -75,9 +75,10 @@ import apps.configuration  # noqa: E402
 import apps.files  # noqa: E402
 import apps.groups  # noqa: E402
 import apps.scan  # noqa: E402
+import apps.scanner  # noqa: E402
 import apps.ui  # noqa: E402
 
-for m in (apps.ui, apps.configuration, apps.scan, apps.files, apps.groups):
+for m in (apps.ui, apps.configuration, apps.scan, apps.files, apps.groups, apps.scanner):
     m.config = config
 
 # ---------------------------------------------------------------------------
@@ -112,6 +113,7 @@ app.include_router(apps.configuration.router, prefix=f"{prefix}/api")
 app.include_router(apps.scan.router, prefix=f"{prefix}/api")
 app.include_router(apps.files.router, prefix=f"{prefix}/api")
 app.include_router(apps.groups.router, prefix=f"{prefix}/api")
+app.include_router(apps.scanner.router, prefix=prefix)
 
 
 # ---------------------------------------------------------------------------
