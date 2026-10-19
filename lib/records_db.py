@@ -186,7 +186,9 @@ def list_files(pattern: str = "") -> Dict[str, Any]:
         with conn.cursor() as cur:
             q = (
                 "SELECT f.file_path, f.file_type, f.last_update, f.last_refresh, "
-                "(SELECT count(*) FROM raw_records r WHERE r.file_id = f.id) AS record_count "
+                "(SELECT count(*) FROM raw_records r WHERE r.file_id = f.id) AS record_count, "
+                "(SELECT r.data FROM raw_records r WHERE r.file_id = f.id "
+                " ORDER BY r.record_index LIMIT 1) AS sample_record "
                 "FROM raw_files f"
             )
             params: List[Any] = []
@@ -205,6 +207,7 @@ def list_files(pattern: str = "") -> Dict[str, Any]:
             "last_update": r[2].isoformat() if r[2] is not None else None,
             "last_refresh": r[3].isoformat() if r[3] is not None else None,
             "record_count": r[4],
+            "sample_record": r[5],  # 첫 레코드(샘플), 없으면 None
         }
         for r in rows
     ]
